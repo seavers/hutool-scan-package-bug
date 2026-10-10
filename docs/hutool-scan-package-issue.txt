@@ -35,6 +35,7 @@ import org.dromara.hutool.core.reflect.ClassUtil;
 public class PermissionValidator {
     public static void main(String[] args) {
         System.out.println(checkPermission("ai#generate_title#generate#web"));
+        System.out.println(checkPermission("ai#generate_title#generate#app"));
     }
 
     static PermissionKey checkPermission(String key) {
@@ -54,9 +55,9 @@ public class PermissionValidator {
 }
 ```
 
-上述代码用于演示通过扫描自动发现权限枚举的实际业务场景。
+上述代码用于演示通过扫描自动发现权限枚举的实际业务场景（假设权限枚举中分别定义了 #web 和 #app 两种权限键）。
 
-需要说明的是，单独调用业务扫描方法并不会直接抛出异常（每次新建连接会由 Spring Boot 打开新的 JAR 实例）；问题的根因在于 Hutool 扫描结束后静默关闭了共享的 NestedJarFile 对象，导致在此之前已建立连接并持有该对象的外部调用方后续在访问 JAR 时报 Zip file closed。完整复现工程见上述仓库。下面的运行结果来自完整 demo。
+需要说明的是，单纯顺序调用两次扫描方法并不会直接抛出异常（每次新建连接会由 Spring Boot 打开新的 JAR 实例）；问题的根因在于 Hutool 扫描结束后静默关闭了共享的 NestedJarFile 对象，导致在此之前已建立连接并持有该对象的外部调用方后续在访问 JAR 时报 Zip file closed。完整复现工程见上述仓库。下面的运行结果来自完整 demo。
 
 5.x 对应使用 cn.hutool.core.util.ClassUtil。
 
