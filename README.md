@@ -60,7 +60,7 @@ JDK 17.0.19、Hutool 6.0.0-M22、Boot Loader 3.3.1：
 
 ```text
 模式=复现，Hutool=6.0.0-M22，类加载器=org.springframework.boot.loader.launch.LaunchedClassLoader
-包 URL=jar:nested:/Users/lhj/workspace7/hutool-scan-package-bug/target/hutool-scan-package-bug-1.0-SNAPSHOT.jar/!BOOT-INF/classes/!/demo/permissions
+包 URL=jar:nested:/.../target/hutool-scan-package-bug-1.0-SNAPSHOT.jar/!BOOT-INF/classes/!/demo/permissions
 JAR 类型=org.springframework.boot.loader.net.protocol.jar.UrlNestedJarFile，共享同一对象=true，对象标识=28ba21f3
 [第一次调用] 扫描前读取成功，条目=demo/
 [第 1 次扫描] Hutool 扫描完成，发现类=[class demo.permissions.AiPermissionKey]
@@ -80,7 +80,7 @@ REPRODUCED：单线程第二次调用已有连接，复现共享 NestedJarFile �
 
 ```text
 模式=连续扫描，Hutool=6.0.0-M22，类加载器=org.springframework.boot.loader.launch.LaunchedClassLoader
-包 URL=jar:nested:/Users/lhj/workspace7/hutool-scan-package-bug/target/hutool-scan-package-bug-1.0-SNAPSHOT.jar/!BOOT-INF/classes/!/demo/permissions
+包 URL=jar:nested:/.../target/hutool-scan-package-bug-1.0-SNAPSHOT.jar/!BOOT-INF/classes/!/demo/permissions
 JAR 类型=org.springframework.boot.loader.net.protocol.jar.UrlNestedJarFile，共享同一对象=true，对象标识=28ba21f3
 [第一次调用] 扫描前读取成功，条目=demo/
 [第 1 次扫描] Hutool 扫描完成，发现类=[class demo.permissions.AiPermissionKey]
