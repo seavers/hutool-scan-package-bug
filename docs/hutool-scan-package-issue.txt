@@ -1,0 +1,130 @@
+标题：
+ClassScanner 扫描后关闭 Spring Boot 共享 NestedJarFile，导致后续读取报 Zip file closed（5.x、6.x 均可复现）
+
+正文：
+
+JDK版本：OpenJDK 17.0.19
+hutool版本：5.8.48、6.0.0-M22
+Spring Boot Loader版本：3.5.6
+
+### 问题描述（包括截图）
+
+通过 Spring Boot 可执行 JAR 运行时，ClassUtil.scanPackageBySuper() 扫描嵌套依赖 JAR 后，会关闭 Spring Boot 共享的 NestedJarFile，导致已有连接后续访问该对象时报错：
+
+```text
+java.lang.IllegalStateException: Zip file closed
+```
+
+整个复现过程在 main 方法中顺序执行：先取得 JAR 对象，再执行 Hutool 扫描，最后通过已有连接读取 JAR，即可触发异常。
+
+#### 1. 复现代码
+
+完整 demo：
+
+- Hutool 5.8.48：https://github.com/seavers/hutool-scan-package-bug/tree/master
+- Hutool 6.0.0-M22：https://github.com/seavers/hutool-scan-package-bug/tree/hutool6
+
+demo 将 PermissionKey 接口及其实现枚举放在独立依赖 JAR 中，打包后位于 BOOT-INF/lib。
+
+以下为 6.x 版本的核心复现代码：
+
+```java
+import demo.permissions.PermissionKey;
+import org.dromara.hutool.core.reflect.ClassUtil;
+
+import java.net.JarURLConnection;
+import java.net.URL;
+import java.util.jar.JarFile;
+
+public class Main {
+    public static void main(String[] args) throws Exception {
+        ClassLoader loader = Thread.currentThread().getContextClassLoader();
+        URL url = loader.getResource("demo/permissions");
+
+        // 扫描前建立两个连接，确认它们持有同一个共享 JAR。
+        JarURLConnection firstConnection = (JarURLConnection) url.openConnection();
+        JarURLConnection secondConnection = (JarURLConnection) url.openConnection();
+        JarFile firstJar = firstConnection.getJarFile();
+        JarFile secondJar = secondConnection.getJarFile();
+
+        System.out.println("共享同一对象：" + (firstJar == secondJar));
+        System.out.println("扫描前读取：" + firstJar.entries().nextElement().getName());
+
+        // 执行包扫描，业务代码没有主动关闭 JAR。
+        System.out.println(ClassUtil.scanPackageBySuper("demo.permissions", PermissionKey.class));
+
+        // 扫描结束后，通过已有连接再次读取 JAR。
+        System.out.println(secondConnection.getJarFile().entries().nextElement().getName());
+    }
+}
+```
+
+5.x 对应使用 cn.hutool.core.util.ClassUtil。
+
+运行完整 demo：
+
+```bash
+mvn -q package
+java -jar demo-app/target/demo-app-1.0-SNAPSHOT.jar
+```
+
+需要通过 java -jar 运行。从 IDE 直接运行 main，会使用普通 classes 目录，不具备嵌套 JAR 的触发条件。
+
+#### 2. 运行结果
+
+5.8.48 和 6.0.0-M22 均出现以下结果：
+
+```text
+共享同一对象：true
+扫描前读取：META-INF/
+[class demo.permissions.AiPermissionKey]
+
+java.lang.IllegalStateException: Zip file closed
+    at org.springframework.boot.loader.jar.NestedJarFile.ensureOpen(NestedJarFile.java:414)
+    at org.springframework.boot.loader.jar.NestedJarFile.entries(NestedJarFile.java:175)
+```
+
+对照验证：
+
+- 跳过 Hutool 扫描，通过已有连接再次读取正常。
+- 扫描结束后重新建立连接，Boot 返回新的 JAR 对象，读取及再次扫描正常。
+
+触发问题的关键是：已有连接仍持有被 Hutool 扫描关闭的旧 JAR 对象。
+
+#### 3. 原因定位
+
+5.8.48 中，ClassScanner 的调用链为：
+
+```text
+scan()
+  → scanJar(URLUtil.getJarFile(url))
+  → finally: IoUtil.close(jar)
+```
+
+6.0.0-M22 中，调用链为：
+
+```text
+scan()
+  → scanJar(new JarResource(url).getJarFile())
+  → finally: IoUtil.closeQuietly(jar)
+```
+
+6.x 的 JarResource 仍通过 JarURLConnection.getJarFile() 获取 JAR。
+
+两个版本均未区分自行创建的 JAR 与 URL 连接返回的共享 JAR，扫描完成后统一关闭，导致已有连接持有的对象失效。
+
+#### 4. 影响范围
+
+在 6.0.0-M22 中，还分别验证了以下入口，均会关闭共享 JAR：
+
+- ClassUtil.scanPackage() 及指定包、过滤器重载。
+- ClassUtil.scanPackageBySuper()、scanPackageByAnnotation()。
+- ClassScanner 对应的静态扫描方法。
+- ClassScanner.scanAllPackage()、scanAllPackageBySuper()、scanAllPackageByAnnotation()。
+- ClassScanner 实例方法 scan()、scan(false)、scan(true)。
+
+这些入口最终共用 scanJar()。即使过滤器没有匹配任何类，共享 JAR 也会被关闭。
+
+#### 5. 预期行为
+
+扫描结束后，应释放扫描器自行创建并拥有的 JAR 资源，同时避免关闭 Spring Boot 类加载器或其他连接仍在使用的共享 JAR。
