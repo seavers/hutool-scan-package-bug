@@ -26,38 +26,36 @@ java.lang.IllegalStateException: Zip file closed
 
 demo 将 PermissionKey 接口及其实现枚举放在独立依赖 JAR 中，打包后位于 BOOT-INF/lib。
 
-以下为 6.x 版本的核心复现代码：
+以下为简化的业务调用示例（6.x）：权限定义分散在多个枚举中，通过扫描自动发现实现类，再根据请求中的权限键查找定义。
 
 ```java
 import demo.permissions.PermissionKey;
 import org.dromara.hutool.core.reflect.ClassUtil;
 
-import java.net.JarURLConnection;
-import java.net.URL;
-import java.util.jar.JarFile;
+public class PermissionValidator {
+    public static void main(String[] args) {
+        System.out.println(findPermission("ai#generate_title#generate#web"));
+        System.out.println(findPermission("ai#generate_title#generate#web"));
+    }
 
-public class Main {
-    public static void main(String[] args) throws Exception {
-        ClassLoader loader = Thread.currentThread().getContextClassLoader();
-        URL url = loader.getResource("demo/permissions");
-
-        // 扫描前建立两个连接，确认它们持有同一个共享 JAR。
-        JarURLConnection firstConnection = (JarURLConnection) url.openConnection();
-        JarURLConnection secondConnection = (JarURLConnection) url.openConnection();
-        JarFile firstJar = firstConnection.getJarFile();
-        JarFile secondJar = secondConnection.getJarFile();
-
-        System.out.println("共享同一对象：" + (firstJar == secondJar));
-        System.out.println("扫描前读取：" + firstJar.entries().nextElement().getName());
-
-        // 执行包扫描，业务代码没有主动关闭 JAR。
-        System.out.println(ClassUtil.scanPackageBySuper("demo.permissions", PermissionKey.class));
-
-        // 扫描结束后，通过已有连接再次读取 JAR。
-        System.out.println(secondConnection.getJarFile().entries().nextElement().getName());
+    static PermissionKey findPermission(String key) {
+        // 自动发现权限枚举，查找请求对应的权限定义。
+        for (Class<?> type : ClassUtil.scanPackageBySuper("demo.permissions", PermissionKey.class)) {
+            if (type.isEnum()) {
+                for (Object value : type.getEnumConstants()) {
+                    PermissionKey permission = (PermissionKey) value;
+                    if (key.equals(permission.getKey())) {
+                        return permission;
+                    }
+                }
+            }
+        }
+        throw new IllegalArgumentException("权限不存在：" + key);
     }
 }
 ```
+
+上述代码用于说明扫描方法的实际用途。实测连续调用两次 findPermission() 均正常返回；关闭异常的复现还需要扫描后访问已有连接持有的旧 JAR，完整复现代码见上述仓库。下面的运行结果来自完整 demo。
 
 5.x 对应使用 cn.hutool.core.util.ClassUtil。
 
