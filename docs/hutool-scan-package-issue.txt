@@ -34,11 +34,11 @@ import org.dromara.hutool.core.reflect.ClassUtil;
 
 public class PermissionValidator {
     public static void main(String[] args) {
-        System.out.println(findPermission("ai#generate_title#generate#web"));
-        System.out.println(findPermission("ai#generate_title#generate#web"));
+        System.out.println(checkPermission("ai#generate_title#generate#web"));
+        System.out.println(checkPermission("ai#generate_title#generate#app"));
     }
 
-    static PermissionKey findPermission(String key) {
+    static PermissionKey checkPermission(String key) {
         // 自动发现权限枚举，查找请求对应的权限定义。
         for (Class<?> type : ClassUtil.scanPackageBySuper("demo.permissions", PermissionKey.class)) {
             if (type.isEnum()) {
@@ -55,7 +55,7 @@ public class PermissionValidator {
 }
 ```
 
-上述代码用于说明扫描方法的实际用途。实测连续调用两次 findPermission() 均正常返回；关闭异常的复现还需要扫描后访问已有连接持有的旧 JAR，完整复现代码见上述仓库。下面的运行结果来自完整 demo。
+上述代码用于说明扫描方法的实际用途，假设权限枚举中分别定义了 #web 和 #app 两种权限键。单纯顺序调用两次扫描不必然触发关闭异常；关闭异常的复现还需要扫描后访问已有连接持有的旧 JAR，完整复现代码见上述仓库。下面的运行结果来自完整 demo。
 
 5.x 对应使用 cn.hutool.core.util.ClassUtil。
 
