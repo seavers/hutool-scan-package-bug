@@ -13,7 +13,7 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>cn.hutool</groupId>
+            <groupId>org.dromara.hutool</groupId>
             <artifactId>hutool-core</artifactId>
             <version>${hutool.version}</version>
         </dependency>

@@ -1,8 +1,10 @@
 # Hutool 关闭 Spring Boot 共享嵌套 JAR 的复现
 
-此 demo 使用 **Hutool 5.8.48** 和 **Spring Boot Loader 3.5.6**，在单线程中复现 `ClassUtil.scanPackageBySuper()` 扫描结束后关闭共享 `NestedJarFile`，导致第二次调用已有连接时报 `IllegalStateException: Zip file closed`。
+此 demo 使用 **Hutool 6.0.0-M22** 和 **Spring Boot Loader 3.5.6**，在单线程中复现 `ClassUtil.scanPackageBySuper()` 扫描结束后关闭共享 `NestedJarFile`，导致第二次调用已有连接时报 `IllegalStateException: Zip file closed`。
 
-2026-10-10 核查 [Maven Central 元数据](https://repo.maven.apache.org/maven2/cn/hutool/hutool-core/maven-metadata.xml)，最新发布的 Hutool 5.x 为 **5.8.48**（元数据更新时间：2026-10-09）。版本固定在根 `pom.xml` 中。
+2026-10-10 核查 [Maven Central 元数据](https://repo.maven.apache.org/maven2/org/dromara/hutool/hutool-core/maven-metadata.xml)，最新发布的 Hutool 6.x 为 **6.0.0-M22**，仍为里程碑版本。版本固定在根 `pom.xml` 中。
+
+当前版本改用 Maven 坐标 `org.dromara.hutool:hutool-core` 和 `org.dromara.hutool.core.reflect.ClassUtil`；Spring Boot Loader、权限枚举和单线程验证流程均与此前 5.x demo 相同。
 
 ## 运行
 
@@ -49,7 +51,7 @@ demo 不主动调用 `JarFile.close()`，不模拟 Boot 类加载器，也不反
 
 ## 实测结果与触发边界
 
-JDK 17.0.19、Hutool 5.8.48、Boot Loader 3.5.6：
+JDK 17.0.19、Hutool 6.0.0-M22、Boot Loader 3.5.6：
 
 ```text
 JAR 类型=org.springframework.boot.loader.net.protocol.jar.UrlNestedJarFile，共享同一对象=true
@@ -80,11 +82,23 @@ RESCAN_OK：单线程连续两次扫描成功
 
 ## 根因证据
 
-[Hutool 5.8.48 发布源码](https://repo.maven.apache.org/maven2/cn/hutool/hutool-core/5.8.48/hutool-core-5.8.48-sources.jar) 的 `cn/hutool/core/lang/ClassScanner.java` 中：
+[Hutool 6.0.0-M22 发布源码](https://repo.maven.apache.org/maven2/org/dromara/hutool/hutool-core/6.0.0-M22/hutool-core-6.0.0-M22-sources.jar) 的 `org/dromara/hutool/core/reflect/ClassScanner.java` 中：
 
-- `scan(boolean)` 的 `jar` 协议分支调用 `scanJar(URLUtil.getJarFile(url))`。
-- `scanJar(JarFile)` 在 `finally` 中调用 `IoUtil.close(jar)`。
+- `scan(boolean)` 的 `jar` 协议分支调用 `scanJar(new JarResource(url).getJarFile())`。
+- `scanJar(JarFile)` 在 `finally` 中调用 `IoUtil.closeQuietly(jar)`。
+
+`JarResource.doGetJarFile()` 对 `JarURLConnection` 直接调用 `getJarFile()`，未禁用连接缓存。因此扫描仍会取得 Boot 的共享对象，并在扫描结束时关闭它。
 
 [Boot Loader 3.5.6 发布源码](https://repo.maven.apache.org/maven2/org/springframework/boot/spring-boot-loader/3.5.6/spring-boot-loader-3.5.6-sources.jar) 中，`JarUrlConnection` 持有连接得到的 JAR 对象；`NestedJarFile.ensureOpen()` 在对象已关闭时抛出 `Zip file closed`。新的连接可以获得替换对象，但已连接的旧连接仍然持有关闭的对象。
 
 本 demo 只验证上述版本组合，不推断所有 Boot 版本的行为，也不包含业务修复。
+
+## 5.x 与 6.x 对比
+
+| 验证项（Boot Loader 均为 3.5.6） | Hutool 5.8.48 | Hutool 6.0.0-M22 |
+|---|---|---|
+| 扫描后通过已有连接读取 | Zip file closed | Zip file closed |
+| 跳过扫描，通过已有连接读取 | 成功 | 成功 |
+| 重新建立连接，连续扫描两次 | 成功 | 成功 |
+
+结论：6.0.0-M22 虽调整了包名和 JAR 获取封装，但此共享 JAR 被关闭的问题仍然存在。打包产物已核查仅包含 `hutool-core-6.0.0-M22.jar`，未混入 Hutool 5.x。

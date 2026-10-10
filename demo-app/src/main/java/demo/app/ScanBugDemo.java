@@ -1,6 +1,6 @@
 package demo.app;
 
-import cn.hutool.core.util.ClassUtil;
+import org.dromara.hutool.core.reflect.ClassUtil;
 import demo.permissions.AiPermissionKey;
 import demo.permissions.PermissionKey;
 
