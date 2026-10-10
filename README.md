@@ -14,23 +14,23 @@
 
 ```bash
 mvn -B clean package
-java -jar target/hutool-scan-bug-1.0-SNAPSHOT.jar
+java -jar target/hutool-scan-package-bug-1.0-SNAPSHOT.jar
 ```
 
 如果默认 Maven 缓存不可写，可使用：
 
 ```bash
-mvn -B -Dmaven.repo.local=/tmp/hutool-scan-bug-m2 clean package
+mvn -B -Dmaven.repo.local=/tmp/hutool-scan-package-bug-m2 clean package
 ```
 
 两个对照模式分别在独立 JVM 中运行：
 
 ```bash
 # 跳过第一次扫描，第二次调用已有连接可以正常读取
-java -jar target/hutool-scan-bug-1.0-SNAPSHOT.jar --control
+java -jar target/hutool-scan-package-bug-1.0-SNAPSHOT.jar --control
 
 # 连续调用两次 Hutool 扫描，验证重新建立连接时的行为
-java -jar target/hutool-scan-bug-1.0-SNAPSHOT.jar --rescan
+java -jar target/hutool-scan-package-bug-1.0-SNAPSHOT.jar --rescan
 ```
 
 复现成功输出 `REPRODUCED`；跳过扫描的对照输出 `CONTROL_OK`；连续扫描的对照输出 `RESCAN_OK`。符合预期时退出码为 0，前置条件不成立、未发现枚举或结果不符合预期时返回非零退出码。
@@ -60,7 +60,7 @@ JDK 17.0.19、Hutool 6.0.0-M22、Boot Loader 3.3.1：
 
 ```text
 模式=复现，Hutool=6.0.0-M22，类加载器=org.springframework.boot.loader.launch.LaunchedClassLoader
-包 URL=jar:nested:/Users/lhj/workspace7/hutool-scan-bug/target/hutool-scan-bug-1.0-SNAPSHOT.jar/!BOOT-INF/classes/!/demo/permissions
+包 URL=jar:nested:/Users/lhj/workspace7/hutool-scan-bug/target/hutool-scan-package-bug-1.0-SNAPSHOT.jar/!BOOT-INF/classes/!/demo/permissions
 JAR 类型=org.springframework.boot.loader.net.protocol.jar.UrlNestedJarFile，共享同一对象=true，对象标识=28ba21f3
 [第一次调用] 扫描前读取成功，条目=demo/
 [第 1 次扫描] Hutool 扫描完成，发现类=[class demo.permissions.AiPermissionKey]
@@ -80,7 +80,7 @@ REPRODUCED：单线程第二次调用已有连接，复现共享 NestedJarFile �
 
 ```text
 模式=连续扫描，Hutool=6.0.0-M22，类加载器=org.springframework.boot.loader.launch.LaunchedClassLoader
-包 URL=jar:nested:/Users/lhj/workspace7/hutool-scan-bug/target/hutool-scan-bug-1.0-SNAPSHOT.jar/!BOOT-INF/classes/!/demo/permissions
+包 URL=jar:nested:/Users/lhj/workspace7/hutool-scan-bug/target/hutool-scan-package-bug-1.0-SNAPSHOT.jar/!BOOT-INF/classes/!/demo/permissions
 JAR 类型=org.springframework.boot.loader.net.protocol.jar.UrlNestedJarFile，共享同一对象=true，对象标识=28ba21f3
 [第一次调用] 扫描前读取成功，条目=demo/
 [第 1 次扫描] Hutool 扫描完成，发现类=[class demo.permissions.AiPermissionKey]

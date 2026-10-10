@@ -35,7 +35,6 @@ import org.dromara.hutool.core.reflect.ClassUtil;
 public class PermissionValidator {
     public static void main(String[] args) {
         System.out.println(checkPermission("ai#generate_title#generate#web"));
-        System.out.println(checkPermission("ai#generate_title#generate#app"));
     }
 
     static PermissionKey checkPermission(String key) {
@@ -55,7 +54,9 @@ public class PermissionValidator {
 }
 ```
 
-上述代码用于说明扫描方法的实际用途，假设权限枚举中分别定义了 #web 和 #app 两种权限键。单纯顺序调用两次扫描不必然触发关闭异常；关闭异常的复现还需要扫描后访问已有连接持有的旧 JAR，完整复现代码见上述仓库。下面的运行结果来自完整 demo。
+上述代码用于演示通过扫描自动发现权限枚举的实际业务场景。
+
+需要说明的是，单独调用业务扫描方法并不会直接抛出异常（每次新建连接会由 Spring Boot 打开新的 JAR 实例）；问题的根因在于 Hutool 扫描结束后静默关闭了共享的 NestedJarFile 对象，导致在此之前已建立连接并持有该对象的外部调用方后续在访问 JAR 时报 Zip file closed。完整复现工程见上述仓库。下面的运行结果来自完整 demo。
 
 5.x 对应使用 cn.hutool.core.util.ClassUtil。
 
@@ -63,7 +64,7 @@ public class PermissionValidator {
 
 ```bash
 mvn -B clean package
-java -jar target/hutool-scan-bug-1.0-SNAPSHOT.jar
+java -jar target/hutool-scan-package-bug-1.0-SNAPSHOT.jar
 ```
 
 需要通过 java -jar 运行。从 IDE 直接运行 main，会使用普通 classes 目录，不具备嵌套 JAR 的触发条件。
@@ -73,7 +74,7 @@ java -jar target/hutool-scan-bug-1.0-SNAPSHOT.jar
 5.8.48 和 6.0.0-M22 均出现以下结果：
 
 ```text
-包 URL=jar:nested:/.../target/hutool-scan-bug-1.0-SNAPSHOT.jar/!BOOT-INF/classes/!/demo/permissions
+包 URL=jar:nested:/.../target/hutool-scan-package-bug-1.0-SNAPSHOT.jar/!BOOT-INF/classes/!/demo/permissions
 JAR 类型=org.springframework.boot.loader.net.protocol.jar.UrlNestedJarFile，共享同一对象=true
 [第一次调用] 扫描前读取成功，条目=demo/
 [第 1 次扫描] Hutool 扫描完成，发现类=[class demo.permissions.AiPermissionKey]
