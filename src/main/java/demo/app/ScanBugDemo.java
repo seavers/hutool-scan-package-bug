@@ -1,8 +1,8 @@
 package demo.app;
 
-import org.dromara.hutool.core.reflect.ClassUtil;
 import demo.permissions.AiPermissionKey;
 import demo.permissions.PermissionKey;
+import org.dromara.hutool.core.reflect.ClassUtil;
 
 import java.net.JarURLConnection;
 import java.net.URL;
@@ -20,15 +20,15 @@ public class ScanBugDemo {
             throw new IllegalArgumentException("仅支持无参数复现、--control 对照或 --rescan 连续扫描");
         }
 
-        // 确认通过可执行 JAR 的真实类加载器访问嵌套依赖，而非 IDE 的 classes 目录。
+        // 步骤 1：确认通过可执行 JAR 的真实类加载器访问嵌套包资源，而非 IDE 的 classes 目录。
         ClassLoader loader = Thread.currentThread().getContextClassLoader();
         URL packageUrl = loader.getResource(PACKAGE_PATH);
         if (packageUrl == null || !"jar".equals(packageUrl.getProtocol())) {
-            throw new IllegalStateException("必须先执行 mvn package，再通过 java -jar 运行；当前包 URL=" + packageUrl);
+            throw new IllegalStateException("必须先执行 mvn -B clean package，再通过 java -jar 运行；当前包 URL=" + packageUrl);
         }
         System.out.printf("模式=%s，Hutool=%s，类加载器=%s%n", control ? "对照" : rescan ? "连续扫描" : "复现", ClassUtil.class.getPackage().getImplementationVersion(), loader.getClass().getName());
 
-        // 在扫描前建立两个连接，确认第二个连接已经持有同一个共享嵌套 JAR。
+        // 步骤 2：在扫描前建立两个连接，确认第二个连接已经持有同一个共享嵌套 JAR。
         JarURLConnection firstConnection = (JarURLConnection) packageUrl.openConnection();
         JarURLConnection secondConnection = (JarURLConnection) packageUrl.openConnection();
         JarFile firstJar = firstConnection.getJarFile();
@@ -39,14 +39,14 @@ public class ScanBugDemo {
         }
         System.out.println("[第一次调用] 扫描前读取成功，条目=" + firstJar.entries().nextElement().getName());
 
-        // 第一次调用执行实际业务扫描；demo 自身不调用 JarFile.close()。
+        // 步骤 3：第一次调用执行实际业务扫描；demo 自身不调用 JarFile.close()。
         if (control) {
             System.out.println("[第一次调用] 对照组跳过 Hutool 扫描");
         } else {
             scan(1);
         }
 
-        // 重新建立连接的情况单独验证：关闭后的旧对象会被替换，两次扫描不必然报错。
+        // 步骤 4：重新建立连接的情况单独验证：关闭后的旧对象会被替换，两次扫描不必然报错。
         if (rescan) {
             JarFile freshJar = ((JarURLConnection) packageUrl.openConnection()).getJarFile();
             System.out.println("[第二次调用] 新连接复用旧 JAR=" + (freshJar == firstJar));
@@ -55,7 +55,7 @@ public class ScanBugDemo {
             return;
         }
 
-        // 第二次调用沿用已建立的连接，读取第一次扫描结束后的共享对象。
+        // 步骤 5：第二次调用沿用已建立的连接，读取第一次扫描结束后的共享对象。
         IllegalStateException failure = null;
         try {
             JarFile reusedJar = secondConnection.getJarFile();
@@ -66,6 +66,7 @@ public class ScanBugDemo {
             failure = exception;
         }
 
+        // 步骤 6：核对验证结果并判定是否成功复现问题。
         if (control) {
             if (failure != null) {
                 throw new IllegalStateException("对照组不应发生关闭异常", failure);
